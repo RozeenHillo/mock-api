@@ -23,11 +23,11 @@ pipeline {
             }
         }
 
-        stage('Run Container') {
+        stage('Run Container (CI mode)') {
             steps {
                 sh '''
                   docker rm -f ${CONTAINER_NAME} || true
-                  docker run -d --name ${CONTAINER_NAME} -p 8000:8000 mock-api:local
+                  docker run -d --name ${CONTAINER_NAME} mock-api:local
                 '''
             }
         }
@@ -36,9 +36,12 @@ pipeline {
             steps {
                 sh '''
                   for i in {1..20}; do
-                    curl -s http://localhost:8000/health && exit 0
+                    if docker exec ${CONTAINER_NAME} curl -s http://localhost:8000/health; then
+                      exit 0
+                    fi
                     sleep 2
                   done
+                  echo "Service did not become ready"
                   exit 1
                 '''
             }
@@ -47,7 +50,7 @@ pipeline {
         stage('Run Pytest') {
             steps {
                 sh '''
-                  pip install -r requirements.txt
+                  pip install --no-cache-dir -r requirements.txt
                   pytest -v
                 '''
             }
@@ -69,12 +72,13 @@ pipeline {
             }
         }
 
-        stage('Pull & Run From Docker Hub') {
+        stage('Pull & Run From Docker Hub (Verification)') {
             steps {
                 sh '''
                   docker rm -f ${CONTAINER_NAME} || true
                   docker pull ${FULL_IMAGE}
-                  docker run -d --name ${CONTAINER_NAME} -p 8000:8000 ${FULL_IMAGE}
+                  docker run -d --name ${CONTAINER_NAME} ${FULL_IMAGE}
+                  docker exec ${CONTAINER_NAME} curl -s http://localhost:8000/health
                 '''
             }
         }
