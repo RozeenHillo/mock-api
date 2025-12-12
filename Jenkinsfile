@@ -4,15 +4,13 @@ pipeline {
     environment {
         DOCKERHUB_USER = "rozeen123"
         IMAGE_NAME     = "mock-api"
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"
+        IMAGE_TAG      = "latest"
         FULL_IMAGE     = "${DOCKERHUB_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
-        FULL_LATEST    = "${DOCKERHUB_USER}/${IMAGE_NAME}:latest"
         CONTAINER_NAME = "mock-api-ci"
-        PORT           = "8000"
-        BASE_URL       = "http://localhost:${PORT}"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -21,90 +19,71 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh """
-                  docker build -t ${FULL_IMAGE} -t ${FULL_LATEST} .
-                """
+                sh 'docker build -t mock-api:local .'
             }
         }
 
         stage('Run Container') {
             steps {
-                sh """
+                sh '''
                   docker rm -f ${CONTAINER_NAME} || true
-                  docker run -d --name ${CONTAINER_NAME} -p ${PORT}:8000 ${FULL_IMAGE}
-                """
+                  docker run -d --name ${CONTAINER_NAME} -p 8000:8000 mock-api:local
+                '''
             }
         }
 
         stage('Wait for Service') {
             steps {
-                sh """
-                  for i in \$(seq 1 30); do
-                    if curl -fsS ${BASE_URL}/health > /dev/null; then
-                      exit 0
-                    fi
-                    sleep 1
+                sh '''
+                  for i in {1..20}; do
+                    curl -s http://localhost:8000/health && exit 0
+                    sleep 2
                   done
-                  echo "Service did not become ready in time"
-                  docker logs ${CONTAINER_NAME} || true
                   exit 1
-                """
+                '''
             }
         }
 
-        stage('Pytest') {
+        stage('Run Pytest') {
             steps {
-                sh """
-                  pip install --no-cache-dir -r requirements.txt
+                sh '''
+                  pip install -r requirements.txt
                   pytest -v
-                """
+                '''
             }
         }
 
-        stage('Docker Login + Push (only if tests passed)') {
+        stage('Docker Login & Push') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-                    sh """
-                      echo "\$DH_PASS" | docker login -u "\$DH_USER" --password-stdin
+                withCredentials([usernamePassword(
+                    credentialsId: 'Docker_cred',
+                    usernameVariable: 'DH_USER',
+                    passwordVariable: 'DH_PASS'
+                )]) {
+                    sh '''
+                      echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+                      docker tag mock-api:local ${FULL_IMAGE}
                       docker push ${FULL_IMAGE}
-                      docker push ${FULL_LATEST}
-                      docker logout
-                    """
+                    '''
                 }
             }
         }
 
-        stage('Pull + Run Latest (verification)') {
+        stage('Pull & Run From Docker Hub') {
             steps {
-                sh """
+                sh '''
                   docker rm -f ${CONTAINER_NAME} || true
-                  docker pull ${FULL_LATEST}
-                  docker run -d --name ${CONTAINER_NAME} -p ${PORT}:8000 ${FULL_LATEST}
-                  for i in \$(seq 1 30); do
-                    if curl -fsS ${BASE_URL}/health > /dev/null; then
-                      exit 0
-                    fi
-                    sleep 1
-                  done
-                  echo "Pulled image did not become ready"
-                  docker logs ${CONTAINER_NAME} || true
-                  exit 1
-                """
+                  docker pull ${FULL_IMAGE}
+                  docker run -d --name ${CONTAINER_NAME} -p 8000:8000 ${FULL_IMAGE}
+                '''
             }
         }
     }
 
     post {
         always {
-            sh """
-              docker logs ${CONTAINER_NAME} || true
-              docker rm -f ${CONTAINER_NAME} || true
-            """
-        }
-        cleanup {
-            sh """
-              docker image prune -f || true
-            """
+            sh 'docker logs ${CONTAINER_NAME} || true'
+            sh 'docker rm -f ${CONTAINER_NAME} || true'
         }
     }
 }
