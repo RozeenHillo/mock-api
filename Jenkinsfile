@@ -33,32 +33,27 @@ pipeline {
         }
 
         stage('Wait for Service') {
-    steps {
-        sh '''
-          for i in $(seq 1 20); do
-            echo "Health check attempt $i..."
-            if docker exec ${CONTAINER_NAME} curl -sf http://localhost:8000/health > /dev/null; then
-              echo "Service is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Service did not become ready after timeout"
-          exit 1
-        '''
-    }
-}
-
-
+            steps {
+                sh '''
+                  for i in $(seq 1 20); do
+                    echo "Health check attempt $i..."
+                    if docker exec ${CONTAINER_NAME} curl -sf http://localhost:8000/health; then
+                      echo "Service is ready"
+                      exit 0
+                    fi
+                    sleep 2
+                  done
+                  echo "Service did not become ready"
+                  exit 1
+                '''
+            }
+        }
 
         stage('Run Pytest') {
-    steps {
-        sh '''
-          docker exec ${CONTAINER_NAME} pytest -v
-        '''
-    }
-}
-
+            steps {
+                sh 'docker exec ${CONTAINER_NAME} pytest -v'
+            }
+        }
 
         stage('Docker Login & Push') {
             steps {
@@ -82,7 +77,6 @@ pipeline {
                   docker rm -f ${CONTAINER_NAME} || true
                   docker pull ${FULL_IMAGE}
                   docker run -d --name ${CONTAINER_NAME} ${FULL_IMAGE}
-                  docker exec ${CONTAINER_NAME} curl -s http://localhost:8000/health
                 '''
             }
         }
@@ -95,6 +89,3 @@ pipeline {
         }
     }
 }
-
-
-
