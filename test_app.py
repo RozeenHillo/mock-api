@@ -2,17 +2,28 @@ import requests
 
 BASE_URL = "http://localhost:8000"
 
-def test_valid():
-    r = requests.get(f"{BASE_URL}/valid")
+
+def test_health_ok():
+    r = requests.get(f"{BASE_URL}/health", timeout=5)
     assert r.status_code == 200
-    assert r.json()["message"] == "OK - valid request"
+    assert r.json()["status"] == "ok"
 
-def test_bad_request():
-    r = requests.get(f"{BASE_URL}/bad-request")
+
+def test_valid_200():
+    r = requests.get(f"{BASE_URL}/mock", params={"mode": "valid"}, timeout=5)
+    assert r.status_code == 200
+    assert r.json()["result"] == "success"
+
+
+def test_bad_400():
+    r = requests.get(f"{BASE_URL}/mock", params={"mode": "bad"}, timeout=5)
     assert r.status_code == 400
-    assert "Bad Request" in r.json()["error"]
+    body = r.json()
+    assert body["error"] == "Bad Request"
 
-def test_server_error():
-    r = requests.get(f"{BASE_URL}/server-error")
+
+def test_error_500():
+    r = requests.get(f"{BASE_URL}/mock", params={"mode": "error"}, timeout=5)
     assert r.status_code == 500
-    assert "Internal Server Error" in r.json()["error"]
+    body = r.json()
+    assert body["error"] == "Internal Server Error"
