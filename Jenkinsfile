@@ -52,13 +52,13 @@ pipeline {
 
 
         stage('Run Pytest') {
-            steps {
-                sh '''
-                  pip install --no-cache-dir -r requirements.txt
-                  pytest -v
-                '''
-            }
-        }
+    steps {
+        sh '''
+          docker exec ${CONTAINER_NAME} pytest -v
+        '''
+    }
+}
+
 
         stage('Docker Login & Push') {
             steps {
@@ -95,5 +95,6 @@ pipeline {
         }
     }
 }
+
 
 
