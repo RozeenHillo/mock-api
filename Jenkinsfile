@@ -35,19 +35,20 @@ pipeline {
         stage('Wait for Service') {
     steps {
         sh '''
-          for i in {1..20}; do
-            if docker exec mock-api-ci curl -sf http://localhost:8000/health; then
+          for i in $(seq 1 20); do
+            echo "Health check attempt $i..."
+            if docker exec ${CONTAINER_NAME} curl -sf http://localhost:8000/health > /dev/null; then
               echo "Service is ready"
               exit 0
             fi
-            echo "Waiting for service..."
             sleep 2
           done
-          echo "Service did not become ready"
+          echo "Service did not become ready after timeout"
           exit 1
         '''
     }
 }
+
 
 
         stage('Run Pytest') {
@@ -94,4 +95,5 @@ pipeline {
         }
     }
 }
+
 
